@@ -1,0 +1,638 @@
+---
+title: "Investigation of Specific Gene sets in Control data"
+author: "YEK"
+date: "2022-10-11"
+output: pdf_document
+---
+
+## NRF2 and other gene sets
+
+I will look for the coverage of some gene sets in our proteomics data.
+
+
+```{r}
+library(tidyverse)
+
+
+setwd("D:/2_POST_DOC/2_PROTEOMICS/OXIDATIVE_STRESS_ANALYSIS_1")
+
+data <- read.delim("CONTROL_stable_lines_of_mito_NES_and_NLS_ORGANIZED.txt",
+                   header = T)
+
+
+data %>% head()
+
+#### Convert columns with number, from class of character to numeric:
+
+## First way:
+
+data[,c(2:4,8:13)] <- data[,c(2:4,8:13)] %>% apply(MARGIN = 2, as.numeric)
+
+## Second way: 
+
+data[,c(2:4,8:13)] <- as.data.frame(sapply(data[,c(2:4,8:13)], as.numeric)) 
+### sapply returns matrix as output so we turn it back to df.
+
+### Check if columns converted to numeric:
+
+### First way:
+
+for (i in colnames(data)) {print(class(data[,i]))}
+
+# [1] "character"
+# [1] "numeric"
+# [1] "numeric"
+# [1] "numeric"
+# [1] "character"
+# [1] "character"
+# [1] "character"
+# [1] "numeric"
+# [1] "numeric"
+# [1] "numeric"
+# [1] "numeric"
+# [1] "numeric"
+# [1] "numeric"
+# [1] "character"
+
+### Second way:
+
+sapply(data, class)
+
+
+data %>% head()
+
+### add gene ids:
+
+library(org.Hs.eg.db)
+
+### select() is masked so we should explicitly tell R when use of dplyr::select.
+
+data$gene_ids <- mapIds(x = org.Hs.eg.db, keys = data$single_IDs,
+                      keytype = "UNIPROT", column = "SYMBOL",
+                      multiVals = "first")
+
+data_short <- data %>% dplyr::select(single_IDs, gene_ids, mito_raw, NES_raw,
+                                     NLS_raw)
+
+data_short %>% head
+
+### we have 0 values: 
+
+data_short[rowSums(data_short[,-c(1:2)])>0,] %>% dim() 
+
+## we have no NA values.
+
+is.na(data_short[,-c(1,2)]) %>% table()
+
+anyNA(data_short[,-c(1,2)])
+
+### let us filter zero values:
+
+data_short_filtered <- data_short[rowSums(data_short[,-c(1:2)])>0,]
+
+data_short_filtered %>% dim()
+
+### check if numeric
+### columns have any NA:
+
+data_short_filtered[,-c(1:2)] %>% is.na() %>% table()  
+
+### reading gene sets:
+
+### GO categories are stored in "org.Hs.eg.db" package. 
+
+# R Documentation for org.Hs.egGO {org.Hs.eg.db} 	:
+
+
+# Maps between Entrez Gene IDs and Gene Ontology (GO) IDs
+
+# Description
+
+# org.Hs.egGO is an R object that provides mappings between entrez gene 
+# identifiers and the GO identifiers that they are directly associated with. 
+# This mapping and its reverse mapping do NOT associate the child terms from 
+# the GO ontology with the gene. Only the directly evidenced terms are 
+#represented here.
+
+# # 
+# # org.Hs.egGO2ALLEGS is an R object that provides mappings between a given GO 
+# identifier and all of the Entrez Gene identifiers annotated at that GO term OR 
+# TO ONE OF IT'S CHILD NODES in the GO ontology. Thus, this mapping is much 
+# larger and more inclusive than org.Hs.egGO2EG.
+# 
+# Details
+# If org.Hs.egGO is cast as a list, each Entrez Gene identifier is mapped to a 
+# list of lists. The names on the outer list are GO identifiers. Each inner list 
+# consists of three named elements: GOID, Ontology, and Evidence.
+# # 
+# # The GOID element matches the GO identifier named in the outer list and is 
+# included for convenience when processing the data using 'lapply'.
+# # 
+# # The Ontology element indicates which of the three Gene Ontology categories 
+# this identifier belongs to. The categories are biological process (BP), 
+#cellular
+# component (CC), and molecular function (MF).
+# # 
+# # The Evidence element contains a code indicating what kind of evidence 
+#supports
+# the association of the GO identifier to the Entrez Gene id. Some of the 
+#evidence 
+# codes in use include:
+# 
+# IMP: inferred from mutant phenotype
+# 
+# IGI: inferred from genetic interaction
+# 
+# IPI: inferred from physical interaction
+# 
+# ISS: inferred from sequence similarity
+# 
+# IDA: inferred from direct assay
+# 
+# IEP: inferred from expression pattern
+# 
+# IEA: inferred from electronic annotation
+# 
+# TAS: traceable author statement
+# 
+# NAS: non-traceable author statement
+# 
+# ND: no biological data available
+# 
+# IC: inferred by curator
+# 
+# A more complete listing of evidence codes can be found at:
+# 
+# http://www.geneontology.org/GO.evidence.shtml
+
+## Bimap interface:
+x <- org.Hs.egGO
+# Get the entrez gene identifiers that are mapped to a GO ID
+
+mapped_genes <- mappedkeys(x)
+
+### we can convert it to a list.
+
+
+yy <- as.list(x[mapped_genes])
+
+### Genes in a GO.term have different evidence attributes, which shows based on
+### which methods they are associated with this term.
+### this list contains entrez gene ids and their associated Go terms. 
+### Importantly, same entrez gene ID can be asociated with the same Go. terms
+### with more than one evidence element.
+
+# For the reverse map:
+# Convert to a list
+xx <- as.list(org.Hs.egGO2EG)
+
+xx["GO:0006979"] %>% print()
+
+goids <- xx[2:3]
+
+keytypes(org.Hs.eg.db) ### to view the types available:
+ 
+
+data_short$entrez_ids <- mapIds(x = org.Hs.eg.db, keys = data_short$single_IDs, 
+                     keytype = "UNIPROT", column = "ENTREZID",
+                     multiVals = "list") ### ıf there are more than one entrez
+#ids that match, it will take all of them in a list.
+
+nrow(data_short) ### 1008
+
+unlist(data_short$entrez_ids) %>% length() ### ıt is more than 1008 so 
+# multi-match exists.
+
+
+
+data_short$single_entrez_ids <-  mapIds(x = org.Hs.eg.db, 
+                            keys = data_short$single_IDs, 
+                            keytype = "UNIPROT", column = "ENTREZID", 
+                            multiVals = "first") ### only the first entrez id
+### from the multi matched ids.
+
+
+
+xx["GO:0006979"][[1]] %>% length() ### oxidative stress gene sets from GO 
+### database.
+
+anyNA(xx["GO:0006979"][[1]])
+
+### how many of the genes we have in this GO term:
+
+table(data_short$single_entrez_ids %in% xx["GO:0006979"][[1]])
+
+
+
+data_short$gene_ids[data_short$single_entrez_ids %in% xx["GO:0006979"][[1]]]
+
+### Using all EGs db:
+
+my_db <-as.list(org.Hs.egGO2ALLEGS)
+
+my_db[["GO:0006979"]] %>% length() ### larger gene set, containing parent GOs.
+
+### Look at how many of them are found in our detected proteins:
+
+anyNA(my_db[["GO:0006979"]])
+
+table(data_short$single_entrez_ids %in% my_db[["GO:0006979"]])
+
+data_short$gene_ids[data_short$single_entrez_ids %in% my_db[["GO:0006979"]]]
+
+### or with pipe:
+  
+data_short %>% 
+  filter(data_short$single_entrez_ids %in% my_db[["GO:0006979"]]) %>% 
+  pull(gene_ids)
+
+### go to the directory including gmt files:
+
+setwd("D:/2_POST_DOC/2_PROTEOMICS/OXIDATIVE_STRESS_ANALYSIS_1/GENE_SETS/gmts")
+
+### checking biocarta NRF2 activated gene set:
+
+NRF_2_bio_carta <- 
+  pathwayPCA::read_gmt("BIOCARTA_ARENRF2_PATHWAY.v2022.1.Hs.gmt")[[1]] %>% 
+  unlist()
+
+NRF_2_bio_carta %>% print()
+
+### it contains gene sets.
+
+### convert to entrez ids:
+
+NRF2_biocarta_entrezids <- mapIds(x = org.Hs.eg.db, keys = NRF_2_bio_carta, 
+                                  keytype = "SYMBOL", column = "ENTREZID", 
+                                  multiVals = "first")
+
+
+
+NRF2_biocarta_entrezids %>% length()
+
+NRF2_biocarta_entrezids %>% anyNA()
+
+### 20 NRF2 activated genes in this pathway.
+
+### Look at them in the our proteomics dataset:
+
+data_short$gene_ids[data_short$single_entrez_ids %in% NRF2_biocarta_entrezids] 
+
+### two NRF2 induced genes in our dataset.
+
+hallmark_inflam_resp <- 
+  pathwayPCA::read_gmt("HALLMARK_INFLAMMATORY_RESPONSE.v2022.1.Hs.gmt")
+
+hallmark_inflam_resp <- hallmark_inflam_resp[[1]] %>% unlist()
+
+hallmark_inflam_resp_entrezids <- mapIds(x = org.Hs.eg.db, 
+                                         keys = hallmark_inflam_resp, 
+                                         keytype = "SYMBOL", 
+                                         column = "ENTREZID", 
+                                         multiVals = "first")
+
+hallmark_inflam_resp_entrezids %>% print() 
+
+hallmark_inflam_resp_entrezids %>% length
+
+hallmark_inflam_resp_entrezids %>% anyNA()
+
+### check the covered ones in our datasets:
+
+
+
+data_short$gene_ids[data_short$single_entrez_ids %in% 
+                      hallmark_inflam_resp_entrezids] %>% print()
+
+#### Hallmark ROS species pathway:
+
+hallmark_ros_genes <- 
+pathwayPCA::read_gmt("HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY.v2022.1.Hs.gmt")
+
+hallmark_ros_genes <- hallmark_ros_genes[[1]] %>% unlist()
+
+hallmark_ros_genes %>% length()
+
+hallmark_ros_genes %>% anyNA()
+
+### convert to entrez ids:
+
+hallmark_ros_genes_entrez_ids <- mapIds(x = org.Hs.eg.db, 
+                                        keys = hallmark_ros_genes,
+                                        keytype = "SYMBOL",column = "ENTREZID",
+                                        multiVals = c("first"))
+
+hallmark_ros_genes_entrez_ids %>% length()
+
+print(hallmark_ros_genes_entrez_ids)
+
+anyNA(hallmark_ros_genes_entrez_ids)
+
+### looking the intersection in our dataset:
+
+data_short$gene_ids[data_short$single_entrez_ids 
+                    %in% hallmark_ros_genes_entrez_ids]
+
+### Ap-1 targeted gene sets identified by Motif MAp:
+
+### Known targets of AP1 that were down-regulated by overexpression of TAM67, 
+### a dominant-negative form of JUN
+
+MATTHEWS_AP1_TARGETS <-pathwayPCA::read_gmt(
+  "MATTHEWS_AP1_TARGETS.v2022.1.Mm.gmt")
+
+MATTHEWS_AP1_TARGETS <- MATTHEWS_AP1_TARGETS[[1]] %>% unlist()
+
+MATTHEWS_AP1_TARGETS %>% print() 
+
+### gene names are in lower case. mapids funcion wants upper case.
+### we will use toupper function to convert to upper case:
+
+
+### convert to entrez ids:
+
+MATTHEWS_AP1_TARGETS_entrezids <- mapIds(x = org.Hs.eg.db,
+                                         keys = toupper(MATTHEWS_AP1_TARGETS), 
+                                         keytype = "SYMBOL", 
+                                         column = "ENTREZID", 
+                                         multiVals = "first")
+
+MATTHEWS_AP1_TARGETS_entrezids %>% print()
+
+### allways check if any NA exists. If there is, use na.omit function:
+
+MATTHEWS_AP1_TARGETS_entrezids %>% anyNA()
+
+### look at these genes in our dataset:
+
+## we will omit the NAs therefore the order will change.
+
+data_short$gene_ids[data_short$single_entrez_ids %in% 
+                (MATTHEWS_AP1_TARGETS_entrezids %>% na.omit %>% as.vector())]
+
+### AP-1 gene set from another paper:
+ 
+OZANNE_AP1_TARGETS_UP <- 
+  pathwayPCA::read_gmt("OZANNE_AP1_TARGETS_UP.v2022.1.Hs.gmt")
+
+OZANNE_AP1_TARGETS_UP <- OZANNE_AP1_TARGETS_UP[[1]] %>% unlist()
+
+OZANNE_AP1_TARGETS_UP %>% print 
+
+OZANNE_AP1_TARGETS_UP_entrezid <- mapIds(x = org.Hs.eg.db, 
+                                         keys = OZANNE_AP1_TARGETS_UP, 
+                                         column = "ENTREZID",keytype = "SYMBOL",
+                                         multiVals ="first")
+
+OZANNE_AP1_TARGETS_UP_entrezid %>% print()
+
+OZANNE_AP1_TARGETS_UP_entrezid %>% anyNA()
+
+data_short$gene_ids[data_short$single_entrez_ids 
+                    %in% OZANNE_AP1_TARGETS_UP_entrezid]
+
+### Genes down-regulated in MEF cells 
+### (embryonic fibroblasts) after knockout of NFE2L2 [GeneID=4780] gene 
+### (NRF2 gene)
+
+NRF2_NFE2L2.V2_genes <- pathwayPCA::read_gmt("NFE2L2.V2.v2022.1.Hs.gmt")
+
+NRF2_NFE2L2.V2_genes <- NRF2_NFE2L2.V2_genes[[1]] %>% unlist()
+
+NRF2_NFE2L2.V2_genes %>% anyNA()
+
+NRF2_NFE2L2.V2_genes %>% print()
+
+### there are three ensembl ids:
+
+NRF2_NFE2L2.V2_genes[112:114] %>% print()
+### [1] "ENSG00000261522" "ENSG00000267260" "ENSG00000267882"
+
+ ### I got ids from google and replacing them:
+ 
+NRF2_NFE2L2.V2_genes[112:114] <- c("LOC100133920","LOC728485","LOC100131496")
+
+NRF2_NFE2L2.V2_genes_entrezids <- mapIds(x = org.Hs.eg.db, 
+                                         keys = NRF2_NFE2L2.V2_genes, 
+                                         keytype = "SYMBOL", 
+                                         column = "ENTREZID",
+                                         multiVals = "first")
+
+NRF2_NFE2L2.V2_genes_entrezids %>% print()
+
+anyNA(NRF2_NFE2L2.V2_genes_entrezids)
+
+### not any NA exists.
+
+data_short$gene_ids[data_short$single_entrez_ids %in% 
+                      NRF2_NFE2L2.V2_genes_entrezids]
+
+### directory is long so I used paste0 function.
+
+endothelial_genes <- read.delim(paste0("D:/2_POST_DOC/2_PROTEOMICS/",
+"OXIDATIVE_STRESS_ANALYSIS_1/GENE_SETS/endothelial_markers.txt"), header=FALSE)
+
+endothelial_genes <- endothelial_genes$V1
+
+endothelial_genes %>% class()
+
+endothelial_genes_entrezids <- mapIds(x = org.Hs.eg.db, 
+                                      keys = endothelial_genes,
+                                      keytype = "SYMBOL", column = "ENTREZID",
+                                      multiVals = "first")
+
+endothelial_genes_entrezids %>% anyNA()
+
+endothelial_genes_entrezids %>% print
+
+endothelial_genes_entrezids %>% anyNA()
+
+endothelial_genes_entrezids %>% is.na() %>% table()
+
+### I converted gene symbols to other gene symbols in a website:
+
+endothelial_genes_2 <- read.delim(paste0("D:/2_POST_DOC/2_PROTEOMICS/",
+"OXIDATIVE_STRESS_ANALYSIS_1/GENE_SETS/endothelial_markers_2.txt"),
+header=FALSE)
+
+endothelial_genes_2 <- endothelial_genes_2$V1
+
+endothelial_genes_entrezids_2 <- mapIds(x = org.Hs.eg.db, 
+                                      keys = endothelial_genes_2,
+                                      keytype = "SYMBOL", column = "ENTREZID",
+                                      multiVals = "first")
+
+endothelial_genes_entrezids_2 %>% print
+
+endothelial_genes_entrezids_2 %>% anyNA()
+
+### Now, all is assigned with an entrez id.
+
+data$gene_ids[data_short$single_entrez_ids %in% endothelial_genes_entrezids_2]
+
+### Check the created objects:
+
+ls() 
+
+data_short_filtered_log10_norm <- data_short_filtered
+
+data_short_filtered_log10_norm[,3:5] <- log10(data_short_filtered[,3:5]+1)
+
+### adding entrez ids:
+
+data_short_filtered$single_entrez_ids <-  mapIds(x = org.Hs.eg.db, 
+                            keys =  data_short_filtered$single_IDs, 
+                            keytype = "UNIPROT", column = "ENTREZID", 
+                            multiVals = "first") ### only the first entrez id
+### from the multi matched ids.
+
+
+data_short_filtered_log10_norm$single_entrez_ids <-  mapIds(x = org.Hs.eg.db, 
+                            keys =  data_short_filtered_log10_norm$single_IDs, 
+                            keytype = "UNIPROT", column = "ENTREZID", 
+                            multiVals = "first") ### only the first entrez id
+
+data_log <- data_short_filtered_log10_norm
+
+
+colnames(data_log)
+
+cnames <- c("protein_ids","gene_ids", "mito","NES","NLS","entrez_ids")
+#### focused gene lists:
+
+### replace NA with the relevant entrez id:
+
+MATTHEWS_AP1_TARGETS_entrezids %>% print()
+
+MATTHEWS_AP1_TARGETS_entrezids[2] <- "761"
+
+data_log %>% filter(single_entrez_ids %in% endothelial_genes_entrezids_2) %>% 
+  write.csv(file = "endothelial_gene_matrix.csv")
+
+library(kableExtra)  ## for tables:
+
+
+data_log %>% filter(single_entrez_ids %in% endothelial_genes_entrezids_2) %>% 
+                      kbl(caption = "endothelial_genes_entrezids_2",
+                          col.names = cnames,) %>% kable_classic(full_width = F, 
+                                                        html_font = "Cambria",
+                                                        font_size = 20)
+
+
+data_log %>% filter(single_entrez_ids %in% hallmark_ros_genes_entrez_ids) %>% 
+  write.csv(file = "hallmark_ros_gene_matrix.csv")
+
+data_log %>% filter(single_entrez_ids %in% hallmark_ros_genes_entrez_ids)  %>% 
+                      kbl(caption = "hallmark_ros_genes_entrez_ids",
+                          col.names = cnames) %>% kable_classic(full_width = F, 
+                                                        html_font = "Cambria",
+                                                        font_size = 20)
+
+data_log %>% filter(single_entrez_ids %in% NRF2_NFE2L2.V2_genes_entrezids) %>% 
+write.csv(file = "NRF2_NFE2L2.V2_gene_matrix.csv")
+
+data_log %>% filter(single_entrez_ids %in% NRF2_NFE2L2.V2_genes_entrezids) %>% 
+                      kbl(caption = " NRF2_NFE2L2.V2_genes_entrezids",
+                          col.names = cnames) %>% kable_classic(full_width = F, 
+                                                        html_font = "Cambria",
+                                                        font_size = 20)
+
+data_log %>% filter(single_entrez_ids %in% MATTHEWS_AP1_TARGETS_entrezids) %>% 
+write.csv(file = "MATTHEWS_AP1_TARGET_gene_mat.csv")
+
+data_log %>% filter(single_entrez_ids %in% MATTHEWS_AP1_TARGETS_entrezids) %>% 
+                      kbl(caption = " MATTHEWS_AP1_TARGETS_entrezids",
+                          col.names = cnames) %>% kable_classic(full_width = F, 
+                                                        html_font = "Cambria",
+                                                        font_size = 20)
+
+data_log %>% filter(single_entrez_ids %in% NRF2_biocarta_entrezids) %>% 
+  write.csv(file = "NRF2_biocarta_gene_mat.csv") 
+
+data_log %>% filter(single_entrez_ids %in% NRF2_biocarta_entrezids) %>% 
+kbl(caption = " NRF2_biocarta_entrezids",
+                          col.names = cnames) %>% kable_classic(full_width = F, 
+                                                        html_font = "Cambria",
+                                                        font_size = 20)
+
+  
+data_log %>% filter(single_entrez_ids %in% OZANNE_AP1_TARGETS_UP_entrezid) %>% 
+  write.csv(file = "OZANNE_AP1_TARGETS_UP_gene_mat.csv")
+
+
+data_log %>% filter(single_entrez_ids %in% hallmark_inflam_resp_entrezids) %>% 
+  write.csv(file = "hallmark_inflam_resp_gene_mat.csv")
+
+data_log %>% filter(single_entrez_ids %in% hallmark_inflam_resp_entrezids) %>% 
+kbl(caption = " hallmark_inflam_resp_entrezids",
+                          col.names = cnames) %>% kable_classic(full_width = F, 
+                                                        html_font = "Cambria",
+                                                        font_size = 20)
+
+
+data_log %>% filter(single_entrez_ids %in% my_db[["GO:0006979"]]) %>% write.csv(file = "GO-0006979response_to_oxidative_stress_genes_mat.csv")
+
+data_log %>% filter(single_entrez_ids %in% my_db[["GO:0006979"]]) %>% 
+kbl(caption = " GO-0006979response_to_oxidative_stress_genes",
+                          col.names = cnames) %>% kable_classic(full_width = F, 
+                                                        html_font = "Cambria",
+                                                        font_size = 20)
+
+#### check the number of genes:
+
+my_obj <- ls() ### retrieve the names of all the objects.
+
+my_obj <- my_obj[grepl("entrez", my_obj)] ## filter the names having "entrez".
+
+my_obj <- my_obj[-1] ### remove the unused first object's name.
+
+my_obj %>% print
+
+### we will use get() function which brings the objects by their cognate 
+### character names. sum() will output the number of TRUE variables.
+
+sapply(my_obj,function(x) sum(get(x) %in% data_short$single_entrez_ids)) 
+
+### Total genes in the gene sets:
+
+sapply(my_obj, function(x) length(get(x)))
+
+my_db[["GO:0006979"]] %>% length()
+
+
+### response to oxidative stress genes:
+
+gene_1 <- data_log %>% filter(single_entrez_ids %in% my_db[["GO:0006979"]]) %>% pull(gene_ids)
+
+gene_2 <- data_short$gene_ids[data_short$single_entrez_ids %in% my_db[["GO:0006979"]]]
+
+gene_3 <- data_short$gene_ids[data_short$single_entrez_ids %in% xx["GO:0006979"][[1]]]
+
+gene_1 %>% length()
+
+gene_2 %>% length()
+
+gene_3 %>% length()
+
+setdiff(gene_2, gene_1)
+
+setdiff(gene_3, gene_1)
+
+### check whether these gene have zero value:
+
+data_short %>% filter(gene_ids %in% setdiff(gene_2, gene_1))
+
+### so we have 59 genes out of 528.
+
+write.csv(data_short_filtered, file = "data_short_filtered.csv")
+write.csv(data_short_filtered_log10_norm, file = "data_short_filtered_log10_norm.csv")
+
+sessionInfo()
+
+
+```
+
+
+
+
+
