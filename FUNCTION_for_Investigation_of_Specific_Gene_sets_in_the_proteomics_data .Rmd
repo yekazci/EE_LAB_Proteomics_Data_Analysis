@@ -1,0 +1,198 @@
+---
+title: "some_other_gene_sets"
+author: "YEK"
+date: "2022-10-14"
+output: pdf_document
+---
+```{r}
+
+setwd("D:/2_POST_DOC/2_PROTEOMICS/OXIDATIVE_STRESS_ANALYSIS_1")
+load(paste0("D:/2_POST_DOC/2_PROTEOMICS/OXIDATIVE_STRESS_ANALYSIS_1/",
+"Investigation_of_Specific_Gene_sets_in_Control_data_workspace.RData"))
+
+setwd(list.dirs()[3])
+
+
+library(org.Hs.eg.db)
+features <- org.Hs.eg.db
+Biocarta_NFKB_genes$pathways[[1]] -> Biocarta_NFKB_genes
+
+Biocarta_NFKB_entrezids <- AnnotationDbi::mapIds(x = features, keys = Biocarta_NFKB_genes, column = "ENTREZID", keytype = "SYMBOL", multiVals = "first")
+
+data_log %>% filter(single_entrez_ids %in% Biocarta_NFKB_entrezids) %>% pull(gene_ids)
+
+
+data_log %>% filter(single_entrez_ids %in% Biocarta_NFKB_entrezids) %>%
+write.csv(file = "biocarta_NFKB_gene_matrix.csv")
+
+## table as picture:
+
+library(kableExtra)
+
+data_log %>% filter(single_entrez_ids %in% Biocarta_NFKB_entrezids)  %>% kbl(caption = "Biocarta_NFKB_entrezids",
+col.names = cnames) %>% kable_classic(full_width = F,
+html_font = "Cambria",
+font_size = 20)
+
+                    
+hallmark_apoptosis_genes <- pathwayPCA::read_gmt(list.files(pattern = "apopt",
+                                                            ignore.case = TRUE))         
+
+hallmark_apoptosis_genes <- hallmark_apoptosis_genes$pathways[[1]]
+                    
+hallmark_apoptosis_genes %>% print()
+
+### convert to entrez ids:
+
+hallmark_apoptosis_entrezids <- AnnotationDbi::mapIds(features, keys = hallmark_apoptosis_genes, column = "ENTREZID", keytype = "SYMBOL",
+                                                      multiVals = "first")
+
+hallmark_apoptosis_entrezids %>% anyNA()
+
+hallmark_apoptosis_entrezids %>% print()
+
+data_log %>% filter(single_entrez_ids %in% hallmark_apoptosis_entrezids) %>%
+  write.csv(file = "hallmark_apoptosis_protein_mat")
+
+data_log %>% filter(single_entrez_ids %in% hallmark_apoptosis_entrezids)  %>% 
+kbl(caption = "hallmark_apoptosis_entrezids",
+col.names = cnames) %>% kable_classic(full_width = F,
+html_font = "Cambria",
+font_size = 20)
+
+
+##########################################################
+
+### I write a function to automatise these steps 
+### for the next gene set files with ".gmt" extension. 
+
+my_function <- function(x){
+
+input <- list.files(pattern = x,ignore.case = TRUE)
+
+print(input)
+
+if(length(input)>1)
+  input <-input[grepl(pattern = ".gmt", x = input)]
+
+print(input)
+
+
+genes <- pathwayPCA::read_gmt(input)         
+ 
+genes <- genes$pathways[[1]]
+
+  
+### convert to entrez ids:
+
+genes_entrezids <- AnnotationDbi::mapIds(org.Hs.eg.db, keys = genes, 
+                                      column = "ENTREZID", keytype = "SYMBOL",
+                                                      multiVals = "first")
+
+genes_entrezids %>% print()
+
+if(anyNA((genes_entrezids))){
+  
+  genes_entrezids <- na.omit(genes_entrezids) %>% as.vector()
+  
+}
+
+
+### remove the .gmt extension from the file name string:
+
+file_name <- str_remove(string = input, pattern = ".gmt") 
+
+data_log %>% filter(single_entrez_ids %in% genes_entrezids) %>%
+  write.csv(file = paste0(file_name,"_protein_mat.csv"))
+
+data_log %>% filter(single_entrez_ids %in% genes_entrezids) %>%           
+kableExtra::kbl(caption = paste0(file_name,"_entrezids"),
+col.names = cnames) %>% kableExtra::kable_classic(full_width = F,
+html_font = "Cambria",
+font_size = 20) %>% kableExtra::save_kable(file = paste0(file_name,".png"))       
+
+### Print all the genes in the pathway and their lengths:
+
+genes %>% print()
+
+genes %>% length() %>% print()
+
+
+data_log %>% filter(single_entrez_ids %in% genes_entrezids) %>% 
+  pull(gene_ids) %>% print()
+
+data_log %>% filter(single_entrez_ids %in% genes_entrezids) %>% 
+  pull(gene_ids) %>% length()
+
+}
+
+### we retrieve all the .gmt. files:
+
+my_gsets <- list.files(pattern = ".gmt")
+
+### Check the indices of the desired files:
+
+print(my_gsets)
+
+### Investigate the gene sets in our proteomics data:
+
+sapply(X = my_gsets[c(6,8)], FUN = my_function)
+
+sessionInfo()
+ 
+# sessionInfo()
+# R version 4.2.1 (2022-06-23 ucrt)
+# Platform: x86_64-w64-mingw32/x64 (64-bit)
+# Running under: Windows 10 x64 (build 19043)
+# 
+# Matrix products: default
+# 
+# locale:
+# [1] LC_COLLATE=Turkish_Turkey.utf8  LC_CTYPE=Turkish_Turkey.utf8   
+# [3] LC_MONETARY=Turkish_Turkey.utf8 LC_NUMERIC=C                   
+# [5] LC_TIME=Turkish_Turkey.utf8    
+# 
+# attached base packages:
+# [1] stats4    stats     graphics  grDevices utils     datasets  methods   base     
+# 
+# other attached packages:
+#  [1] BiocManager_1.30.18  org.Hs.eg.db_3.15.0  forcats_0.5.2        stringr_1.4.1       
+#  [5] dplyr_1.0.10         purrr_0.3.4          readr_2.1.2          tidyr_1.2.1         
+#  [9] tibble_3.1.8         ggplot2_3.3.6        tidyverse_1.3.2      AnnotationDbi_1.58.0
+# [13] IRanges_2.30.1       S4Vectors_0.34.0     Biobase_2.56.0       BiocGenerics_0.42.0 
+# 
+# loaded via a namespace (and not attached):
+#  [1] bitops_1.0-7           fs_1.5.2               lubridate_1.8.0       
+#  [4] bit64_4.0.5            webshot_0.5.4          httr_1.4.4            
+#  [7] GenomeInfoDb_1.32.4    bslib_0.4.0            tools_4.2.1           
+# [10] backports_1.4.1        utf8_1.2.2             R6_2.5.1              
+# [13] DBI_1.1.3              colorspace_2.0-3       withr_2.5.0           
+# [16] processx_3.7.0         tidyselect_1.1.2       bit_4.0.4             
+# [19] compiler_4.2.1         cli_3.4.0              rvest_1.0.3           
+# [22] xml2_1.3.3             sass_0.4.2             scales_1.2.1          
+# [25] callr_3.7.2            systemfonts_1.0.4      digest_0.6.29         
+# [28] rmarkdown_2.16         svglite_2.1.0          XVector_0.36.0        
+# [31] pkgconfig_2.0.3        htmltools_0.5.3        highr_0.9             
+# [34] dbplyr_2.2.1           fastmap_1.1.0          rlang_1.0.5           
+# [37] readxl_1.4.1           rstudioapi_0.14        RSQLite_2.2.17        
+# [40] jquerylib_0.1.4        generics_0.1.3         jsonlite_1.8.0        
+# [43] googlesheets4_1.0.1    RCurl_1.98-1.8         magrittr_2.0.3        
+# [46] kableExtra_1.3.4       GenomeInfoDbData_1.2.8 lars_1.3              
+# [49] Matrix_1.5-0           Rcpp_1.0.9             munsell_0.5.0         
+# [52] fansi_1.0.3            lifecycle_1.0.2        yaml_2.3.5            
+# [55] stringi_1.7.8          zlibbioc_1.42.0        grid_4.2.1            
+# [58] blob_1.2.3             parallel_4.2.1         crayon_1.5.1          
+# [61] lattice_0.20-45        Biostrings_2.64.1      haven_2.5.1           
+# [64] splines_4.2.1          hms_1.1.2              KEGGREST_1.36.3       
+# [67] magick_2.7.3           ps_1.7.1               knitr_1.40            
+# [70] pillar_1.8.1           pathwayPCA_1.12.0      reprex_2.0.2          
+# [73] glue_1.6.2             evaluate_0.16          modelr_0.1.9          
+# [76] png_0.1-7              vctrs_0.4.1            tzdb_0.3.0            
+# [79] cellranger_1.1.0       gtable_0.3.1           assertthat_0.2.1      
+# [82] cachem_1.0.6           xfun_0.32              broom_1.0.1           
+# [85] viridisLite_0.4.1      survival_3.4-0         googledrive_2.0.0     
+# [88] gargle_1.2.1           memoise_2.0.1          ellipsis_0.3.2 
+
+```
+
+
