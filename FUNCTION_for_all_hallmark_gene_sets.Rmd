@@ -1,0 +1,60 @@
+---
+title: "FUNCTION_for_all_hallmark_gene_Sets"
+author: "YEK"
+date: "2022-10-14"
+output: pdf_document
+---
+
+```{r}
+
+### all terms in the hallmark gene sets:
+
+### current directory is assumed to contain input .gmt file.
+
+### "data log" is the variable object containing our proteomics dataset.
+
+### genet set file: "h.all.v2022.1.Hs.entrez.gmt"
+
+my_function_all_GMTs <- function(x){ ### it take the .gmt file as input.
+
+input_x <- pathwayPCA::read_gmt(x)
+
+path_names <- c()
+
+total_genes <- c()
+
+my_coverage <- c()
+
+for (i in 1:length(input_x$pathways)) {
+  
+  ### remove the .gmt extension from the file name string:
+
+input_y <- input_x$pathway[[i]]
+
+file_name <- input_x$TERMS[i]
+
+temp <- data_log %>% filter(single_entrez_ids %in% input_y)
+
+ 
+temp %>% write.csv(file = paste0(file_name,"_protein_mat.csv"))
+
+temp %>% kableExtra::kbl(caption = paste0(file_name),
+col.names = cnames) %>% kableExtra::kable_classic(full_width = F,
+html_font = "Cambria",
+font_size = 20) %>% kableExtra::save_kable(file = paste0(file_name,".png"))       
+
+path_names <- c(path_names, file_name)
+
+total_genes <- c(total_genes, length(input_y))
+
+my_coverage <- c(my_coverage,nrow(temp))
+
+}
+
+print(data.frame(row.names = path_names, genes= my_coverage, total=total_genes))  
+  
+}
+  
+
+```
+
